@@ -25,6 +25,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor:1.5.2")
 
+    implementation("com.github.kittinunf.fuel:fuel:3.0.0-alpha1")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
+
 
 }
 
