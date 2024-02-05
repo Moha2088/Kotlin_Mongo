@@ -5,11 +5,18 @@ import com.mongodb.client.model.Updates
 import com.mongodb.kotlin.client.coroutine.MongoClient
 import com.mongodb.kotlin.client.coroutine.MongoCollection
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
-import fuel.Fuel
-import fuel.get
 import kotlinx.coroutines.runBlocking
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Response
 import org.bson.codecs.pojo.annotations.BsonId
 import org.bson.types.ObjectId
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.*
+import okhttp3.Request.Builder as RequestBuilder
+
 
 fun main(args: Array<String>) {
 
@@ -38,13 +45,9 @@ fun main(args: Array<String>) {
                     }
                 }
             }
-        }
-
-        catch (ex: MongoException) {
+        } catch (ex: MongoException) {
             println(ex.message)
-        }
-
-        catch (exception: Exception) {
+        } catch (exception: Exception) {
             print(exception.message)
         }
     }
@@ -60,15 +63,21 @@ fun getDatabase(): MongoDatabase {
 
 data class Person(
     @BsonId
-    val id: ObjectId,
-    val name: String,
-    val age: Int,
-    val degree: String,
-    val gender: String,
-    val occupation: String,
-    val stack: MutableList<String>,
-    val city: String
-)
+    val id: ObjectId, var name: String, val age: Int, val degree: String, val gender: String,
+    val occupation: String, val stack: MutableList<String>, val city: String, var creationDate: String
+) {
+    init {
+        val time = Calendar.getInstance().time
+        val formatter = SimpleDateFormat("dd-MM-yyyy HH:mm:ss")
+        val currentTime = formatter.format(time)
+        val timeBuilder = StringBuilder(currentTime)
+
+        timeBuilder.insert(currentTime.indexOf(":") - 3, " --- ")
+        creationDate = timeBuilder.toString()
+        name = name.lowercase()
+                   .trim()
+    }
+}
 
 suspend fun addPerson(
     collection: MongoCollection<Person>
@@ -103,7 +112,8 @@ suspend fun addPerson(
             gender = gender,
             occupation = occupation,
             stack = stackList,
-            city = city
+            city = city,
+            creationDate = ""
         )
 
     collection.insertOne(info).also {
@@ -116,8 +126,7 @@ suspend fun readPerson(collection: MongoCollection<Person>) {
 
     val query = Filters.or(
         listOf(
-            Filters.eq(Person::name.name, "Mohamed"),
-            Filters.eq(Person::gender.name, "Female")
+            Filters.eq(Person::name.name, "Mohamed")
         )
     )
 
@@ -136,35 +145,75 @@ suspend fun updatePerson(collection: MongoCollection<Person>) {
 
     val updateOptions = UpdateOptions().upsert(true)
 
+
     collection.updateMany(filter = query, update, updateOptions).also {
-        println("Updated ${it.modifiedCount} documents in the collection")
+        if (it.modifiedCount.toInt() == 0) {
+            println("No document found with the given query")
+        } else {
+            println("Updated ${it.modifiedCount} documents in the collection")
+        }
     }
 }
 
 suspend fun deletePerson(collection: MongoCollection<Person>) {
 
-    println("Enter the name of the person you want to delete")
-    val personToDelete = readln()
+    var personToDelete: String
+    do {
+        println("Enter the name of the person you want to delete")
+        personToDelete = readln()
+    } while (personToDelete.isEmpty())
+
     val query = Filters.eq(Person::name.name, personToDelete)
 
     println("Enter 1 to delete one or 2 to delete many")
     val input = readln().toInt()
 
-    if (input == 1) {
-        collection.deleteOne(query).also {
-            println("Deleted one document from the collection")
+    try {
+        if (input == 1) {
+            collection.deleteOne(query).also {
+                if (it.deletedCount.toInt() == 0) {
+                    println("No document found with the given query")
+                } else {
+                    println("Deleted one document from the collection")
+                }
+            }
+        } else if (input == 2) {
+            collection.deleteMany(query).also {
+                if (it.deletedCount.toInt() == 0) {
+                    println("No document found with the given query")
+                } else {
+                    println("Deleted ${it.deletedCount} from the collection")
+                }
+            }
         }
-    }
 
-    else if (input == 2) {
-
-        collection.deleteMany(query).also {
-            println("Deleted ${it.deletedCount} documents from the collection")
-        }
+    } catch (ex: IllegalArgumentException) {
+        println("Invalid Argument! ${ex.message}")
+    } catch (ex: Exception) {
+        println(ex.message)
     }
 }
 
+data class Post(val userid: Int, val id: Int, val title: String, val body: String)
+
 suspend fun fetch(uri: String) {
-    val response = Fuel.get(uri).body
-    println(response)
+    val client = OkHttpClient
+        .Builder()
+        .build()
+
+    val request = RequestBuilder()
+        .url(uri)
+        .build()
+
+    client.newCall(request).enqueue(object : Callback {
+        override fun onResponse(call: Call, response: Response) {
+            if (response.isSuccessful) {
+                println(response.body?.string())
+            }
+        }
+
+        override fun onFailure(call: Call, e: IOException) {
+            TODO("Not yet implemented")
+        }
+    })
 }
