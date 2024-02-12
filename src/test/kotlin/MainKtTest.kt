@@ -1,34 +1,62 @@
-
+import Models.Person
+import com.mongodb.kotlin.client.coroutine.MongoClient
 import kotlinx.coroutines.runBlocking
+import org.assertj.core.api.Assertions
 import org.junit.jupiter.api.Test
-import kotlin.test.assertNotNull
 
 class MainKtTest {
 
-//    @Test
-//    fun getDatabase_Should_ReturnDatabase() {
-//        // Arrange
-//        val client =
-//            MongoClient.create(connectionString = "mongodb+srv://maxamed14:V8AV4PCGop0TFMt8@cluster0.dd89cjv.mongodb.net/?retryWrites=true&w=majority")
-//        val database = client.getDatabase("UCL")
-//        val expected = database
-//
-//        // Act
-//        val result = getDatabase()
-//
-//        // Assert
-//        assertNotNull(result)
-//    }
+    @Test
+    fun getDatabase_Should_ReturnDatabase() {
+
+        val client: MongoClient
+        if (System.getenv("MONGO_URI") != null) {
+            client = MongoClient.create(System.getenv("MONGO_URI"))
+
+            val result = getDatabase()
+
+            Assertions.assertThat(result).isInstanceOf(MongoClient.javaClass)
+            Assertions.assertThat(result).isEqualTo(client)
+        }
+    }
 
     @Test
     fun fetch_ShouldReturn_String() {
 
+        // Assert
+        val uri = "https://jsonplaceholder.typicode.com/posts/1"
+
         // Act
         runBlocking {
-            val result = fetch("https://jsonplaceholder.typicode.com/posts/1")
 
-            // Assert
-            assertNotNull(result)
+            val result = fetch(uri)
+
+            //Assert
+            Assertions.assertThat(result).isNotNull
+            Assertions.assertThat(uri).startsWith("http")
+            Assertions.assertThat(uri).isInstanceOf(String::class.java)
+            Assertions.assertThat(uri).isNotNull()
+        }
+    }
+
+    @Test
+    fun addPerson_Should_ReturnString() {
+
+        //Arrange
+
+        runBlocking {
+            val client: MongoClient
+            if (System.getenv("MONGO_URI") != null) {
+                client = MongoClient.create(System.getenv("MONGO_URI"))
+                val database = client.getDatabase("Person")
+                val collection = database.getCollection<Person>("Person")
+
+                // Act
+                val result = addPerson(collection)
+
+                Assertions.assertThat(result).isNotNull()
+                Assertions.assertThat(result).isInstanceOf(String::class.java)
+            }
         }
     }
 }
