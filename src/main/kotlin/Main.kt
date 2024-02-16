@@ -1,5 +1,6 @@
-
 import Models.Person
+import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
 import com.mongodb.MongoException
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.UpdateOptions
@@ -19,8 +20,8 @@ import okhttp3.Request.Builder as RequestBuilder
 fun main(args: Array<String>) {
 
     val client = MongoClient.create(connectionString = System.getenv("MONGO_URI"))
-    val database = getDatabase()
-    val collection: MongoCollection<Person> = database.getCollection<Person>("Person")
+    val database = getDatabase(client)
+    val collection = getCollection(database)
     val running = true
 
     while (running) {
@@ -34,7 +35,8 @@ fun main(args: Array<String>) {
                     2 -> readPerson(collection)
                     3 -> updatePerson(collection)
                     4 -> deletePerson(collection)
-                    5 -> fetch("24232")
+                    5 -> fetch("https://jsonplaceholder.typicode.com/posts/1")
+                    6 -> println(getAllNames(collection))
 
                     else -> throw IllegalArgumentException("Invalid integer. Enter a number from 1-4")
                 }
@@ -50,17 +52,25 @@ fun main(args: Array<String>) {
     client.close()
 }
 
-fun getDatabase(): MongoDatabase {
-
-    val client = MongoClient.create(connectionString = System.getenv("MONGO_URI"))
+fun getDatabase(client: MongoClient): MongoDatabase {
     return client.getDatabase(databaseName = "UCL")
 }
 
+fun getCollection(database: MongoDatabase): MongoCollection<Person> {
+    return database.getCollection<Person>("Person")
+}
 
+suspend fun getAllNames(collection: MongoCollection<Person>):String {
+    val namesList: MutableList<String> = mutableListOf()
+    val query = Filters.empty()
+    collection.find(query).collect{namesList.add(it.name)}
+
+    return namesList.joinToString(separator = " - ", prefix = "[ ", postfix = " ]")
+}
 
 suspend fun addPerson(
     collection: MongoCollection<Person>
-):String {
+): String {
     println("Enter your name: ")
     val name = readln()
     println("Enter your age: ")
@@ -164,10 +174,16 @@ suspend fun readPerson(collection: MongoCollection<Person>) {
 }
 
 suspend fun updatePerson(collection: MongoCollection<Person>) {
-    println("Enter the name of the person to delete")
+
+    println("Enter the name of the person to update")
     val name = readln()
+
+
     val query = Filters.eq(Person::name.name, name)
-    val update = Updates.set(Person::age.name, 100)
+    println("Enter the new name")
+    val newName = readln()
+
+    val update = Updates.set(Person::name.name, newName)
     val options = UpdateOptions().upsert(true)
 
     try {
@@ -183,65 +199,86 @@ suspend fun updatePerson(collection: MongoCollection<Person>) {
     }
 }
 
-    suspend fun deletePerson(collection: MongoCollection<Person>) {
+suspend fun deletePerson(collection: MongoCollection<Person>) {
 
-        var personToDelete: String
-        do {
-            println("Enter the name of the person you want to delete")
-            personToDelete = readln()
-        } while (personToDelete.isEmpty())
+    var personToDelete: String
+    do {
+        println("Enter the name of the person you want to delete")
+        personToDelete = readln()
+    } while (personToDelete.isEmpty())
 
-        val query = Filters.eq(Person::name.name, personToDelete)
+    val query = Filters.eq(Person::name.name, personToDelete)
 
-        println("Enter 1 to delete one or 2 to delete many")
-        val input = readln().toInt()
+    println("Enter 1 to delete one or 2 to delete many")
+    val input = readln().toInt()
 
-        try {
-            if (input == 1) {
-                collection.deleteOne(query).also {
-                    if (it.deletedCount.toInt() == 0) {
-                        println("No document found with the given query")
-                    } else {
-                        println("Deleted one document from the collection")
-                    }
-                }
-            } else if (input == 2) {
-                collection.deleteMany(query).also {
-                    if (it.deletedCount.toInt() == 0) {
-                        println("No document found with the given query")
-                    } else {
-                        println("Deleted ${it.deletedCount} from the collection")
-                    }
+    try {
+        if (input == 1) {
+            collection.deleteOne(query).also {
+                if (it.deletedCount.toInt() == 0) {
+                    println("No document found with the given query")
+                } else {
+                    println("Deleted one document from the collection")
                 }
             }
-
-        } catch (ex: IllegalArgumentException) {
-            println("Invalid Argument! ${ex.message}")
-        } catch (ex: Exception) {
-            println(ex.message)
+        } else if (input == 2) {
+            collection.deleteMany(query).also {
+                if (it.deletedCount.toInt() == 0) {
+                    println("No document found with the given query")
+                } else {
+                    println("Deleted ${it.deletedCount} from the collection")
+                }
+            }
         }
+
+    } catch (ex: IllegalArgumentException) {
+        println("Invalid Argument! ${ex.message}")
+    } catch (ex: Exception) {
+        println(ex.message)
     }
+}
 
-    data class Post(val userid: Int, val id: Int, val title: String, val body: String)
+data class Post(
+    val userid: Int,
+    val id: Int,
+    val title: String,
+    val body: String
+)
 
-    suspend fun fetch(uri: String) {
-        val client = OkHttpClient
-            .Builder()
-            .build()
+suspend fun fetch(uri: String) {
+    val client = OkHttpClient
+        .Builder()
+        .build()
 
-        val request = RequestBuilder()
-            .url(uri)
-            .build()
+    val request = RequestBuilder()
+        .url(uri)
+        .build()
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onResponse(call: Call, response: Response) {
-                if (response.isSuccessful) {
-                    println(response.body?.string())
+    client.newCall(request).enqueue(object : Callback {
+        override fun onResponse(call: Call, response: Response) {
+            if (response.isSuccessful) {
+                val gson = Gson()
+                response.body?.string().let { jsonString ->
+                    try {
+                        val desObj = gson.fromJson(jsonString, Post::class.java)
+                        val objArray = arrayOf(desObj)
+
+                        for (item in objArray) {
+                            println("Id: ${item.id}\n\nTitle: ${item.title}\n\nBody: ${item.body}")
+                        }
+                    } catch (illEx: IllegalStateException) {
+                        println(illEx.message)
+                    } catch (jsonEx: JsonSyntaxException) {
+                        println("Error parsing JSON: ${jsonEx.message}")
+                    } catch (ex: Exception) {
+                        println(ex.message)
+                    }
                 }
             }
+        }
 
-            override fun onFailure(call: Call, e: IOException) {
-                TODO("Not yet implemented")
-            }
-        })
-    }
+        override fun onFailure(call: Call, e: IOException) {
+            TODO("Not yet implemented")
+        }
+    })
+}

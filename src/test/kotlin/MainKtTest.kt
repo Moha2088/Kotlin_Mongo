@@ -1,5 +1,8 @@
+
 import Models.Person
 import com.mongodb.kotlin.client.coroutine.MongoClient
+import com.mongodb.kotlin.client.coroutine.MongoCollection
+import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import kotlinx.coroutines.runBlocking
 import org.assertj.core.api.Assertions
 import org.junit.jupiter.api.Test
@@ -10,32 +13,60 @@ class MainKtTest {
     fun getDatabase_Should_ReturnDatabase() {
 
         val client: MongoClient
+        val database: MongoDatabase
         if (System.getenv("MONGO_URI") != null) {
             client = MongoClient.create(System.getenv("MONGO_URI"))
+            database = client.getDatabase(databaseName = "UCL")
 
-            val result = getDatabase()
+            val result = getDatabase(client)
 
-            Assertions.assertThat(result).isInstanceOf(MongoClient.javaClass)
-            Assertions.assertThat(result).isEqualTo(client)
+            Assertions.assertThat(result).isInstanceOf(MongoDatabase::class.java)
+            Assertions.assertThat(result).isEqualTo(database)
         }
     }
 
     @Test
-    fun fetch_ShouldReturn_String() {
+    fun getCollection_ShouldReturn_Collection() {
+        // Arrange
+        val client: MongoClient
+        val database: MongoDatabase
+        val expectedCollection: MongoCollection<Person>
 
-        // Assert
-        val uri = "https://jsonplaceholder.typicode.com/posts/1"
+        if (System.getenv("MONGO_URI") != null) {
+            client = MongoClient.create(System.getenv("MONGO_URI"))
+            database = client.getDatabase("UCL")
+            expectedCollection = database.getCollection<Person>("Person")
 
-        // Act
-        runBlocking {
+            // Act
+            val result = getCollection(database)
 
-            val result = fetch(uri)
+            // Assert
+            Assertions.assertThat(result).isEqualTo(expectedCollection)
+            Assertions.assertThat(result).isNotNull()
+            Assertions.assertThat(result).isInstanceOf(MongoCollection::class.java)
+        }
+    }
 
-            //Assert
-            Assertions.assertThat(result).isNotNull
-            Assertions.assertThat(uri).startsWith("http")
-            Assertions.assertThat(uri).isInstanceOf(String::class.java)
-            Assertions.assertThat(uri).isNotNull()
+    @Test
+    fun getAllNames_ShouldReturnAllNames() {
+        // Arrange
+        val client: MongoClient
+
+        if (System.getenv("MONGO_URI") != null) {
+            client = MongoClient.create(System.getenv("MONGO"))
+            val database = getDatabase(client)
+            val collection = getCollection(database)
+
+            // Act
+
+            runBlocking {
+                val result = getAllNames(collection)
+
+                // Assert
+                Assertions.assertThat(result).isNotNull()
+                Assertions.assertThat(result).isInstanceOf(String::class.java)
+                Assertions.assertThat(result).contains("["," - ","]")
+            }
         }
     }
 
